@@ -3,14 +3,15 @@ package tools
 import (
 	"context"
 	"fmt"
-	"robot/pkg/ros"
 
-	"github.com/mitchellh/mapstructure"
+	"robot/pkg/robot"
 )
 
+var DefaultRobotAdapter robot.RobotAdapter
+
 type VelRequest struct {
-	Name string   `json:"name" jsonschema:"required,description=ros2话题名称"`
-	Msg  Twist    `json:"msg" jsonschema:"required,description=速度数据"`
+	Name string   `json:"name" required:"true" jsonschema:"required,description=ros2话题名称"`
+	Msg  Twist    `json:"msg" required:"true" jsonschema:"required,description=速度数据"`
 }
 
 type Twist struct {
@@ -25,47 +26,56 @@ type Velocity struct {
 }
 
 func SetVelFunc(ctx context.Context, input VelRequest) (string, error) {
-	var msg map[string]interface{}
-	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		TagName: "json",
-		Result:  &msg,
-	})
-	if err != nil {
-		return "创建decoder失败", err
+	if DefaultRobotAdapter == nil {
+		return "机器人适配器未初始化", fmt.Errorf("robot adapter not initialized")
 	}
-	err = decoder.Decode(input.Msg)
+
+	robotName := extractRobotName(input.Name)
+
+	err := DefaultRobotAdapter.SetVelocity(ctx, robotName, input.Msg.Linear.X, input.Msg.Linear.Y, input.Msg.Angular.Z)
 	if err != nil {
-		return "转换map失败", err
+		return fmt.Sprintf("设置速度失败: %v", err), err
 	}
-	err = ros.DefaultRosBridgeClient.Publish(input.Name, "geometry_msgs/Twist", msg)
-	if err != nil {
-		return "发布失败", err
-	}
-	return "发布成功", nil
+	return fmt.Sprintf("已成功设置 %s 的速度 (linear: %.2f, %.2f; angular: %.2f)",
+		input.Name, input.Msg.Linear.X, input.Msg.Linear.Y, input.Msg.Angular.Z), nil
 }
 
-type PosResponse struct {
-	Name string `json:"name" jsonschema:"required,description=ros2话题名称"`
+type PosRequest struct {
+	Name string `json:"name" required:"true" jsonschema:"required,description=ros2话题名称"`
 }
 
-func GetPosFunc(ctx context.Context, input PosResponse) (string, error) {
-	err := ros.DefaultRosBridgeClient.Subscribe(input.Name, func(msg map[string]interface{}) {
-		fmt.Printf("Received odom data: %v\n", msg)
-	})
-	if err != nil {
-		return "订阅失败", err
+func GetPosFunc(ctx context.Context, input PosRequest) (string, error) {
+	if DefaultRobotAdapter == nil {
+		return "机器人适配器未初始化", fmt.Errorf("robot adapter not initialized")
 	}
-	return "订阅成功", nil
+
+	robotName := extractRobotName(input.Name)
+	odo, err := DefaultRobotAdapter.GetOdometry(ctx, robotName)
+	if err != nil {
+		return fmt.Sprintf("获取位置失败: %v", err), err
+	}
+	return fmt.Sprintf("%s 当前位置: x=%.3f, y=%.3f, theta=%.3f", input.Name, odo.X, odo.Y, odo.Theta), nil
 }
 
 type TopicsForTypeRequest struct {
-	Type string `json:"type" jsonschema:"required,description=ros2话题类型"`
+	Type string `json:"type" required:"true" jsonschema:"required,description=ros2话题类型"`
 }
 
 func GetTopicsFunc(ctx context.Context, input TopicsForTypeRequest) ([]string, error) {
-	topics, err := ros.DefaultRosBridgeClient.GetTopicsForType(input.Type)
-	if err != nil {
-		return nil, err
+	if DefaultRobotAdapter == nil {
+		return nil, fmt.Errorf("robot adapter not initialized")
 	}
-	return topics, nil
+	return DefaultRobotAdapter.ListTopics(ctx, input.Type)
+}
+
+func extractRobotName(topicName string) string {
+	if len(topicName) > 0 && topicName[0] == '/' {
+		topicName = topicName[1:]
+	}
+	for i := 0; i < len(topicName); i++ {
+		if topicName[i] == '/' {
+			return topicName[:i]
+		}
+	}
+	return topicName
 }

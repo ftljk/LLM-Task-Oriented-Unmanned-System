@@ -1,54 +1,116 @@
-这是一个软件工程专业的硕士毕业设计项目，题目为**基于大语言模型结合任务依赖的无人系统协作技术研究与应用验证**。现阶段包含开题报告pdf、论文摘录md和client.go
-- 开题报告：课题背景介绍，初步的研究方案和安排
-- 论文摘录：报告中各参考文献的内容总结、研究背景和方法
-- client：使用Eino框架Agent开发工具，初步实现仿真环境利用自然语言对特定机器人进行简单的运动控制和数据采集
+# LLM Task-Oriented Unmanned System
 
-已完成开发和测试：
-1. 在本地启动client，通过websocket连接到虚拟机中ros2机器人操作系统
-2. ros2在gazebo仿真环境下启动了两台无人车，分别命名为robot1和robot2
-3. client运行时会将用自然语言表述的请求文本输入给SequentialAgent，其内部实现是两个ChatModelAgent顺序连接
-4. 第一个Agent用于分析得到话题名称。先分析请求目标是运动控制/信息采集，得到话题类型
-5. 再调用同类型话题名称查询工具，根据请求中的机器人名称从工具响应中筛选出唯一正确的话题名称
-6. 最后将该话题名称和请求传给下一Agent
-7. 第二个Agent根据输入判断并执行相应的操作，即运动控制/数据采集，分别对应调用不同工具
-8. 最终在虚拟机能看到一台无人车做圆周运动，另一台静止
+基于大语言模型结合任务依赖的无人系统协作技术。
 
-说明：client包含了以上除仿真外的全部实现，依托Eino框架的强大能力，仅需编写少量代码。自然语言输入为“让robot1以线速度x=1，角速度z=1的速度运动”
+## Architecture
 
-根据readme中的描述，根据'14-24S003106-开题报告.pdf' (see below for file content) 继续完成毕业设计内容
+```
+User (Natural Language)
+  ↓
+┌─────────────────────────────────────────┐
+│  Eino ADK TaskPlanner Agent             │
+│  NL → Structured TaskPlan (JSON)        │
+└─────────────────────────────────────────┘
+  ↓
+┌─────────────────────────────────────────┐
+│  Scheduler (DAG-based)                  │
+│  - Task dependency resolution           │
+│  - Parallel execution                   │
+│  - Timeout / Retry / Skip & Continue    │
+│  - Execution summary reporting          │
+└─────────────────────────────────────────┘
+  ↓
+┌─────────────────────────────────────────┐
+│  RobotAdapter Interface                 │
+│  ├─ GOSimRobotAdapter (Go built-in)     │
+│  └─ ROS2RobotAdapter (WebSocket → ROS2) │
+└─────────────────────────────────────────┘
+  ↓
+┌─────────────────────────────────────────┐
+│  Robot Simulation                       │
+│  ├─ GoSim (goroutine physics, test)     │
+│  └─ Gazebo + ROS2 (real sim, optional)  │
+└─────────────────────────────────────────┘
+```
 
-我已经完成了根据开题报告描述的毕业设计内容开发。
+## Project Structure (Go)
 
-主要完成了以下工作：
+```
+llm_robot_agent/
+├── main.go                     # Interactive CLI with multi-turn session
+├── go.mod / go.sum
+├── pkg/
+│   ├── memory/
+│   │   ├── memory.go           # Memory interface (Message, Session, RobotState)
+│   │   └── in_memory.go        # InMemorySessionManager (thread-safe)
+│   ├── task/
+│   │   └── model.go            # Task/TaskPlan with Config, ExecutionResult
+│   ├── robot/
+│   │   ├── interface.go        # RobotAdapter interface
+│   │   ├── sim_adapter.go      # GOSimRobotAdapter (pure Go)
+│   │   └── ros_adapter.go      # ROS2RobotAdapter (WebSocket)
+│   ├── scheduler/
+│   │   └── scheduler.go        # DAG scheduler with retry/timeout/skip
+│   ├── agent/
+│   │   └── agents.go           # Eino Agent definitions
+│   ├── tools/
+│   │   └── robot_tools.go      # Eino Tool implementations
+│   └── ros/
+│       └── client.go           # WebSocket ROS bridge client
+└── cmd/
+    └── test_scheduler/
+        └── main.go             # Standalone scheduler + GoSim test
+```
 
-架构重构与模块化:
+## Project Structure (ROS2)
 
-将原有的单文件 client.go 拆分为清晰的模块化结构，增强了代码的可维护性和扩展性。
-pkg/ros: 封装 ROS Bridge 通信逻辑，支持连接管理、消息发布与订阅，并增加了 Mock 模式以便在无真实环境下的测试。
-pkg/tools: 定义了具体的机器人控制工具（运动控制 SetVelFunc、数据采集 GetPosFunc 等）。
-pkg/agent: 封装了基于 Eino 框架的 Agent 构建逻辑。
-pkg/task: 定义了支持任务依赖的 Task 模型和 TaskPlan 结构。
-pkg/scheduler: 实现了核心的任务调度引擎。
-Task Planner (任务规划器):
+```
+src/robot_sim/
+├── robot_sim_bridge/            # Python WebSocket ↔ ROS2 bridge
+│   └── robot_sim_bridge/
+│       └── bridge_node.py
+└── robot_sim_gz/                # Gazebo simulation package
+    ├── urdf/diff_drive_robot.urdf
+    ├── worlds/
+    └── launch/two_robot_sim.launch.py
+```
 
-开发了 TaskPlanner Agent，利用大语言模型（Deepseek）强大的语义理解能力，将复杂的自然语言指令解析为结构化的任务序列。
-支持识别执行主体（如 robot1, robot2）、动作类型、参数以及关键的任务依赖关系（如“先...然后...”，“同时...”）。
-Task Scheduler (任务调度器):
+## Quick Start
 
-实现了一个具备依赖管理能力的调度器。
-能够解析 TaskPlan 中的依赖关系，自动判断任务的执行时机。
-支持顺序执行（当前置任务完成后执行）和并发执行（无依赖或依赖已满足的任务同时执行）。
-集成验证:
+### GoSim mode (no ROS2 needed):
 
-在 main.go 中完成了系统集成。
-通过一个复杂的多机协作指令进行了验证：
-"让robot1先向前移动(x=0.5)，然后robot2向后移动(x=-0.5)，最后robot1原地旋转(z=1.0)并同时robot2停止(x=0)。"
+```bash
+cd ~/rmf_ws/llm_robot_agent
+export ARK_API_KEY=your_api_key
+go run main.go --simulator=go
+```
 
-验证结果:
-Agent 正确识别了 4 个任务。
-Agent 正确建立了依赖关系：Task 2 依赖 Task 1，Task 3 和 Task 4 依赖 Task 2。
-Scheduler 正确执行了调度：Task 1 -> Task 2 -> (Task 3 & Task 4 并行)。
-底层工具通过 Mock 接口正确输出了控制指令。
-这一实现完美契合了**“基于大语言模型结合任务依赖的无人系统协作技术”**的核心要求，实现了从自然语言到多机协作调度的完整闭环。
+### Scheduler standalone test:
 
-您可以直接运行 go run main.go 来查看演示效果。
+```bash
+go run ./cmd/test_scheduler/
+```
+
+### Gazebo + ROS2 mode:
+
+```bash
+# Terminal 1: Launch simulation
+source ~/rmf_ws/install/setup.bash
+ros2 launch robot_sim_gz two_robot_sim.launch.py
+
+# Terminal 2: Launch bridge
+ros2 run robot_sim_bridge bridge_node
+
+# Terminal 3: Run LLM agent
+cd ~/rmf_ws/llm_robot_agent
+export ARK_API_KEY=your_api_key
+go run main.go --simulator=ros2 --ws=ws://localhost:9090
+```
+
+## Key Features
+
+- **Memory**: Multi-turn conversation with session management
+- **DAG Scheduler**: Task dependency, parallel execution, deadlock detection
+- **Fault Tolerance**: Per-task timeout, retry with backoff, skip-and-continue
+- **Dual Simulator**: Pure-Go simulator for dev, ROS2/Gazebo for real sim
+- **Framewok-Agnostic Core**: Memory, Scheduler, RobotAdapter interfaces have zero Eino dependency

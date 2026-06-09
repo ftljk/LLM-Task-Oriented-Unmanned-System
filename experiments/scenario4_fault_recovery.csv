@@ -1,0 +1,1 @@
+run,intervention_type,intervention_time_sec,timeout_ms,detected_fault,system_result,fallback_action,robot_final_x,robot_final_y,crashed,notes

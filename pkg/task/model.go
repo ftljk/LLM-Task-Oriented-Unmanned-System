@@ -7,6 +7,7 @@ const (
 	StatusRunning   TaskStatus = "Running"
 	StatusCompleted TaskStatus = "Completed"
 	StatusFailed    TaskStatus = "Failed"
+	StatusSkipped   TaskStatus = "Skipped"
 )
 
 type TaskAction string
@@ -14,20 +15,57 @@ type TaskAction string
 const (
 	ActionMove        TaskAction = "Move"
 	ActionCollectData TaskAction = "CollectData"
-	ActionWait        TaskAction = "Wait" // 等待指定时间（秒）
+	ActionWait        TaskAction = "Wait"
 )
 
+type FailureStrategy string
+
+const (
+	FailImmediate  FailureStrategy = "fail"
+	SkipAndContinue FailureStrategy = "skip"
+	RetryWithBackoff FailureStrategy = "retry"
+)
+
+type TaskConfig struct {
+	TimeoutMs    int             `json:"timeout_ms,omitempty"`
+	MaxRetries   int             `json:"max_retries,omitempty"`
+	RetryDelayMs int             `json:"retry_delay_ms,omitempty"`
+	OnFailure    FailureStrategy `json:"on_failure,omitempty"`
+}
+
+func DefaultTaskConfig() TaskConfig {
+	return TaskConfig{
+		TimeoutMs:    30000,
+		MaxRetries:   2,
+		RetryDelayMs: 1000,
+		OnFailure:    FailImmediate,
+	}
+}
+
 type Task struct {
-	ID           string                 `json:"id" jsonschema:"description=任务唯一标识符"`
-	Description  string                 `json:"description" jsonschema:"description=任务自然语言描述"`
-	Action       TaskAction             `json:"action" jsonschema:"description=任务动作类型,enum=Move,enum=CollectData"`
-	Target       string                 `json:"target" jsonschema:"description=执行任务的目标机器人名称,例如robot1"`
-	Params       map[string]interface{} `json:"params" jsonschema:"description=任务参数"`
-	Dependencies []string               `json:"dependencies" jsonschema:"description=依赖的前置任务ID列表"`
-	Status       TaskStatus             `json:"-"` // Internal status
-	Result       string                 `json:"-"` // Execution result
+	ID           string                 `json:"id"`
+	Description  string                 `json:"description"`
+	Action       TaskAction             `json:"action"`
+	Target       string                 `json:"target"`
+	Params       map[string]interface{} `json:"params"`
+	Dependencies []string               `json:"dependencies"`
+	Status       TaskStatus             `json:"-"`
+	Result       string                 `json:"-"`
+	Config       TaskConfig             `json:"config,omitempty"`
+}
+
+type ExecutionResult struct {
+	TaskID       string     `json:"task_id"`
+	Description  string     `json:"description"`
+	Action       TaskAction `json:"action"`
+	Target       string     `json:"target"`
+	Status       TaskStatus `json:"status"`
+	Attempts     int        `json:"attempts"`
+	Error        string     `json:"error,omitempty"`
+	SkipReason   string     `json:"skip_reason,omitempty"`
 }
 
 type TaskPlan struct {
-	Tasks []*Task `json:"tasks" jsonschema:"description=任务列表"`
+	Tasks   []*Task            `json:"tasks"`
+	Results []ExecutionResult  `json:"results,omitempty"`
 }

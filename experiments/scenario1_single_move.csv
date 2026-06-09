@@ -1,0 +1,1 @@
+run,task_id,plan_str,vx_cmd,vy_cmd,yaw_cmd,distance_cmd,pos_before_x,pos_before_y,yaw_before,pos_after_x,pos_after_y,yaw_after,duration_sec,move_distance_m,pos_error_m,success,notes
