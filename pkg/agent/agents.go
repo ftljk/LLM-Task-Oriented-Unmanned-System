@@ -222,7 +222,7 @@ func repairToolArgs(s string) string {
 	return cleaned
 }
 
-func NewTaskPlanner(ctx context.Context, model *ark.ChatModel, historyContext string) (adk.Agent, error) {
+func NewTaskPlanner(ctx context.Context, model *ark.ChatModel, historyContext string, promptVersion string) (adk.Agent, error) {
 	submitPlanTool, _ := utils.InferTool("SubmitPlanOptions", "Submit multiple plan options (2-3 alternatives) for user to choose from. Each option must have a description explaining its strategy.", SubmitPlanOptionsFunc)
 	setPosTool, err := utils.InferTool("SetRobotPosition", "Teleport a robot to an absolute (x, y, theta) coordinate. Use for: setting initial position, resetting to origin, moving to coordinate.", SetRobotPositionToolFunc)
 	if err != nil {
@@ -233,7 +233,7 @@ func NewTaskPlanner(ctx context.Context, model *ark.ChatModel, historyContext st
 	checkObstaclesTool, _ := utils.InferTool("CheckObstacles", "Check LiDAR scan data to find obstacles around a robot. Returns distance in meters to nearest obstacle in the requested direction. Use this before planning movement to avoid collisions.", CheckObstaclesToolFunc)
 	planRouteTool, _ := utils.InferTool("PlanRoute", "Plan a route. Returns pre-computed segments (rotate_z, rotate_duration, target_theta, forward_x, forward_duration, target_x, target_y). Copy all values into Move tasks. Call ONCE then submit. For patrol use waypoint_name='patrol'.", PlanRouteToolFunc)
 
-	instruction := buildPlannerInstruction(historyContext)
+	instruction := buildPlannerInstruction(historyContext, promptVersion)
 
 	planner, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:        "TaskPlanner",
@@ -252,8 +252,70 @@ func NewTaskPlanner(ctx context.Context, model *ark.ChatModel, historyContext st
 	return planner, err
 }
 
-func buildPlannerInstruction(historyContext string) string {
-	base := `You MUST follow these steps EXACTLY for ANY command involving destinations like "去X", "到X", "巡逻", "送货到X":
+func buildPlannerInstruction(historyContext string, promptVersion string) string {
+	var base string
+	switch promptVersion {
+	case "v1":
+		base = v1MinimalPrompt()
+	case "v2":
+		base = v2StructuredPrompt()
+	default:
+		base = v3FullPrompt()
+	}
+
+	if historyContext == "" {
+		return base
+	}
+
+	return fmt.Sprintf(`%s
+
+## Conversation History
+%s
+
+Consider the conversation history and the new user instruction for planning.`, base, historyContext)
+}
+
+func v1MinimalPrompt() string {
+	return `You are a multi-robot task planner. Receive natural language commands, call available tools to determine motion parameters, and submit a plan using SubmitPlanOptions.
+
+Available tools:
+1. PlanRoute(robot_name, waypoint_name) - plan route to a waypoint
+2. SubmitPlanOptions(options) - submit plan for user approval
+3. ComputeMotionParams(robot_name, target_x, target_y, speed) - compute motion to coordinates
+4. ComputeRelativeMotion(robot_name, direction, distance, speed) - compute relative motion
+5. CheckObstacles(robot_name, direction) - check for obstacles
+6. SetRobotPosition(name, x, y, theta) - teleport robot
+
+Submit plan options and let user choose.`
+}
+
+func v2StructuredPrompt() string {
+	return `You are a multi-robot task planner. Convert natural language commands into structured task plans.
+
+Available tools:
+1. PlanRoute(robot_name, waypoint_name) - plan route to a named waypoint. Call for any destination command.
+2. SubmitPlanOptions(options) - submit plan options for user to choose from.
+3. ComputeMotionParams(robot_name, target_x, target_y, speed) - compute forward/rotate params for coordinate movement.
+4. ComputeRelativeMotion(robot_name, direction, distance, speed) - compute rotation angle + forward for relative movement.
+5. CheckObstacles(robot_name, direction) - check LiDAR for obstacles in given direction.
+6. SetRobotPosition(name, x, y, theta) - teleport robot to coordinate (NOT for navigation).
+
+Task rules:
+- Each Move task: x=forward_speed, z=rotate_speed. Duration on Move task.
+- Stop: Move task with NO params.
+- Wait: Use only for pauses.
+- Dependency IDs: task-1, task-2, ...
+- z>0=左转(CCW), z<0=右转(CW). Differential drive: NO y.
+- robot1 (standard, 0.5m/s): default tasks
+- robot2 (delivery, 0.3m/s, cargo): mandatory for "送货/配送"
+
+Procedure:
+1. Call PlanRoute for EACH destination. Convert returned segments into Move→Wait→Stop triplets.
+2. Call SubmitPlanOptions ONCE with all robots' tasks combined into one plan.`
+}
+
+func v3FullPrompt() string {
+	return `You MUST follow these steps EXACTLY for ANY command involving destinations like "去X", "到X", "巡逻", "送货到X":
 
 STEP 1: For EACH robot that needs to navigate to a destination, call PlanRoute(robot_name, waypoint_name).
   - "去pantry" → PlanRoute("robot1", "pantry")
@@ -302,17 +364,6 @@ For "一号机器人去pantry，2号去coe":
 1. PlanRoute("robot1", "pantry") → segments → tasks 1-2-3, 4-5-6, ...
 2. PlanRoute("robot2", "coe") → segments → tasks N+1-N+2-N+3, ...
 3. SubmitPlanOptions with ONE plan containing all tasks.`
-
-	if historyContext == "" {
-		return base
-	}
-
-	return fmt.Sprintf(`%s
-
-## Conversation History
-%s
-
-Consider the conversation history and the new user instruction for planning.`, base, historyContext)
 }
 
 type SimpleTask struct {

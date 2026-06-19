@@ -1,0 +1,6 @@
+command,mode,run,total,success,success_rate_pct,corrections,errors,duration_s
+一号向前移动1米,WITH Normalizer,1,4,4,100.0,,,78
+一号向前移动1米,WITH Normalizer,2,4,4,100.0,,,82
+一号向前移动1米,WITHOUT Normalizer,1,4,4,100.0,,,85
+一号去pantry，同时送货到coe,WITH Normalizer,1,49,49,100.0,,,297
+一号去pantry，同时送货到coe,WITHOUT Normalizer,1,84,84,100.0,,,306

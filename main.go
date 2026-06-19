@@ -47,6 +47,9 @@ func init() {
 	}
 }
 
+var noNorm = flag.Bool("no-normalizer", false, "skip ValidateAndFix (normalizer ablation)")
+var promptVersion = flag.String("prompt-version", "v3", "prompt version: v1 (minimal), v2 (structured), v3 (full)")
+
 func main() {
 	simMode := flag.String("simulator", "go", "simulator mode: go (built-in) or ros2 (WebSocket)")
 	wsURL := flag.String("ws", "ws://localhost:9090", "ROS bridge WebSocket URL")
@@ -462,7 +465,7 @@ func processInput(ctx context.Context, chatModel *ark.ChatModel, mem *memory.InM
 		historyContext = robotStateStr + "\n" + historyContext
 	}
 
-	plannerAgent, err := agent.NewTaskPlanner(ctx, chatModel, historyContext)
+	plannerAgent, err := agent.NewTaskPlanner(ctx, chatModel, historyContext, *promptVersion)
 	if err != nil {
 		log.Printf("Failed to create planner: %v", err)
 		return
@@ -577,12 +580,14 @@ func processInput(ctx context.Context, chatModel *ark.ChatModel, mem *memory.InM
 		selected = opts[idx-1].ToTaskPlan()
 	}
 
-	// Validate and fix plan
-	vr := norm.ValidateAndFix(selected, pp)
-	if vr.WasCorrected {
-		fmt.Println("\n[Corrections] Plan corrected:")
-		for _, c := range vr.Corrections {
-			fmt.Printf("  • %s\n", c)
+	// Validate and fix plan (skip if --no-normalizer)
+	if !*noNorm {
+		vr := norm.ValidateAndFix(selected, pp)
+		if vr.WasCorrected {
+			fmt.Println("\n[Corrections] Plan corrected:")
+			for _, c := range vr.Corrections {
+				fmt.Printf("  • %s\n", c)
+			}
 		}
 	}
 

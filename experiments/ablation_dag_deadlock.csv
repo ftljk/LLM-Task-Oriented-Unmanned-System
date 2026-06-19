@@ -1,0 +1,3 @@
+run,cycle_description,deadlock_detected,duration_sec,error_message
+1,A→B→C→A,true,0.000,deadlock or unresolvable dependencies
+2,X→Y, X→Z (正常DAG),false,0.000,

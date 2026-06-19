@@ -1,0 +1,10 @@
+strategy,route_description,r1_vertices,r2_vertices,r1_distance_m,r2_distance_m,total_distance_m,shared_vertices,r1_compute_us,r2_compute_us,errors
+ShortestPath,对角交叉 (patrol_D1↔coe),8,8,11.963,11.963,23.927,8,5,3,
+ShortestPathAvoiding,对角交叉 (patrol_D1↔coe),0,8,0.000,11.963,11.963,0,2,1,no path from vertex 2 to 24
+ShortestPathMinimizeOverlap,对角交叉 (patrol_D1↔coe),9,8,320.696,311.963,632.659,5,3,1,
+ShortestPath,对角交叉 (supplies↔lounge),6,6,15.894,15.894,31.788,6,5,1,
+ShortestPathAvoiding,对角交叉 (supplies↔lounge),0,6,0.000,15.894,15.894,0,3,1,no path from vertex 8 to 15
+ShortestPathMinimizeOverlap,对角交叉 (supplies↔lounge),11,6,122.488,115.894,238.382,3,2,1,
+ShortestPath,对角交叉 (pantry↔hardware_2),8,8,13.051,13.051,26.103,8,3,1,
+ShortestPathAvoiding,对角交叉 (pantry↔hardware_2),0,8,0.000,13.051,13.051,0,0,1,no path from vertex 4 to 22
+ShortestPathMinimizeOverlap,对角交叉 (pantry↔hardware_2),12,8,223.581,213.051,436.632,4,2,7,
