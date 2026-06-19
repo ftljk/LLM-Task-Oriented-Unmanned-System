@@ -1,1 +1,6 @@
 run,r1_target_x,r1_target_y,r2_target_x,r2_target_y,r1_end_x,r1_end_y,r2_end_x,r2_end_y,r1_error_m,r2_error_m,r1_duration_sec,r2_duration_sec,motion_overlap,success_r1,success_r2,notes
+1,3,1,1,3,3.026,1.038,0.914,3.052,0.046,0.101,22.0,22.0,true,true,true,
+2,3,1,1,3,3.027,1.038,0.913,3.051,0.046,0.101,22.0,22.0,true,true,true,
+3,3,1,1,3,3.028,1.037,0.914,3.052,0.046,0.101,22.0,22.0,true,true,true,
+4,3,1,1,3,3.026,1.038,0.912,3.049,0.046,0.101,22.0,22.0,true,true,true,
+5,3,1,1,3,3.027,1.038,0.913,3.052,0.047,0.101,22.0,22.0,true,true,true,

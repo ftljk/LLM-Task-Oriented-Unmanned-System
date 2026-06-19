@@ -1,1 +1,6 @@
 run,move1_target_x,move1_target_y,move2_target_x,move2_target_y,pos_after_m1_x,pos_after_m1_y,pos_after_m2_x,pos_after_m2_y,m1_error_m,m2_error_m,total_time_sec,success_m1,success_m2,task_order_correct,notes
+1,3,1,0,0,3.027,1.037,0.010,-0.027,0.046,0.028,12.7,true,true,true,
+2,3,1,0,0,3.027,1.038,0.009,-0.025,0.047,0.027,12.7,true,true,true,
+3,3,1,0,0,3.026,1.038,0.008,-0.026,0.046,0.027,12.7,true,true,true,
+4,3,1,0,0,3.027,1.038,0.008,-0.024,0.047,0.025,12.7,true,true,true,
+5,3,1,0,0,3.028,1.037,0.009,-0.024,0.046,0.026,12.7,true,true,true,

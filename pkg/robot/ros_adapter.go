@@ -171,7 +171,7 @@ func (a *ROS2RobotAdapter) GetLaserScan(ctx context.Context, robotName string) (
 }
 
 func (a *ROS2RobotAdapter) SetPosition(ctx context.Context, robotName string, x, y, theta float64) error {
-	log.Printf("[ROS2] SetPosition(%s, %.2f, %.2f, %.2f) - not implemented via ROS", robotName, x, y, theta)
+	log.Printf("[ROS2] SetPosition(%s, %.2f, %.2f, %.2f) - STUB, not implemented", robotName, x, y, theta)
 	return nil
 }
 

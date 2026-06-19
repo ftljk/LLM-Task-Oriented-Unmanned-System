@@ -1,0 +1,72 @@
+[18:04:49] ============================================================
+[18:04:49] Gazebo 仿真功能验证
+[18:04:49] ============================================================
+[18:04:49] Gazebo start (GUI)...
+[18:04:57]   Starting ROS2 launch...
+[18:05:05]   Starting Bridge...
+[18:05:10] Wait /startup_done...
+[18:05:12] 
+=== 基础设施就绪 ===
+[18:05:12] 
+==================================================
+[18:05:12] 实验A：前进 1m 精度 × 3
+[18:05:12] ==================================================
+[18:05:12]   Agent start: 一号向前移动1米
+[18:08:35]   TIMEOUT: Timeout exceeded.
+<pexpect.pty_spawn.spawn object at 0x7d75a9187a40>
+command: /usr/bin/bash
+args: [b'/usr/bin/bash', b'-c', b'source /opt/ros/kilted/setup.bash && source /home/mofus/rmf_ws/install/setup.bash &&  exec /home/mofus/go1.23/bin/go run . --simulator=ros2 --ws=ws://localhost:9090']
+buffer (last 100 chars): 'gent.\r\n\r\n>>> '
+before (last 100 chars): '---------------------\r\nnode path: [ChatModel]\r\n[Timeout] No plan options submitted by agent.\r\n\r\n>>> '
+after: <class 'pexpect.exceptions.TIMEOUT'>
+match: None
+match_index: None
+exitstatus: None
+flag_eof: False
+pid: 5724
+child_fd: 5
+closed: False
+timeout: 180
+delimiter: <class 'pexpect.exceptions.EOF'>
+logfile: None
+logfile_read: None
+logfile_send: None
+maxread: 2000
+ignorecase: False
+searchwindowsize: None
+delaybeforesend: 0.05
+delayafterclose: 0.1
+delayafterterminate: 0.1
+searcher: searcher_string:
+    0: 'Select option'
+    1: '[Executing]'
+[18:08:38]   Agent start: 一号向前移动1米
+[18:11:59]   TIMEOUT: Timeout exceeded.
+<pexpect.pty_spawn.spawn object at 0x7d75a8661b80>
+command: /usr/bin/bash
+args: [b'/usr/bin/bash', b'-c', b'source /opt/ros/kilted/setup.bash && source /home/mofus/rmf_ws/install/setup.bash &&  exec /home/mofus/go1.23/bin/go run . --simulator=ros2 --ws=ws://localhost:9090']
+buffer (last 100 chars): 'gent.\r\n\r\n>>> '
+before (last 100 chars): '---------------------\r\nnode path: [ChatModel]\r\n[Timeout] No plan options submitted by agent.\r\n\r\n>>> '
+after: <class 'pexpect.exceptions.TIMEOUT'>
+match: None
+match_index: None
+exitstatus: None
+flag_eof: False
+pid: 5871
+child_fd: 5
+closed: False
+timeout: 180
+delimiter: <class 'pexpect.exceptions.EOF'>
+logfile: None
+logfile_read: None
+logfile_send: None
+maxread: 2000
+ignorecase: False
+searchwindowsize: None
+delaybeforesend: 0.05
+delayafterclose: 0.1
+delayafterterminate: 0.1
+searcher: searcher_string:
+    0: 'Select option'
+    1: '[Executing]'
+[18:12:02]   Agent start: 一号向前移动1米

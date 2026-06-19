@@ -60,11 +60,11 @@ func (g *Graph) PlanPath(robotX, robotY, robotTheta float64, path []int, speed f
 			angleDelta += 2 * math.Pi
 		}
 
-		rotateZ := -1.0
+		rotateZ := -0.5
 		if angleDelta > 0 {
-			rotateZ = 1.0
+			rotateZ = 0.5
 		}
-		rotateDur := math.Abs(angleDelta)
+		rotateDur := math.Abs(angleDelta) / 0.5
 		if math.Abs(angleDelta) < 0.01 {
 			rotateZ = 0
 			rotateDur = 0

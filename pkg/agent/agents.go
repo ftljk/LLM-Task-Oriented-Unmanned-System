@@ -28,7 +28,7 @@ func NewChatModel(ctx context.Context) (*ark.ChatModel, error) {
 
 	modelID := os.Getenv("ARK_MODEL_ID")
 	if modelID == "" {
-		modelID = "deepseek-v3-1-250821"
+		modelID = "deepseek-v3-2-251201"
 	}
 
 	return ark.NewChatModel(ctx, &ark.ChatModelConfig{
@@ -200,17 +200,26 @@ func InjectToolImplementations(
 }
 
 var tabBeforeKey = regexp.MustCompile(`\t([a-zA-Z_][a-zA-Z0-9_]*)\s*:`)
+var tabBeforeValue = regexp.MustCompile(`\t([a-zA-Z_][a-zA-Z0-9_]*)(")`)
 
 func repairToolArgs(s string) string {
 	var dummy any
 	if json.Unmarshal([]byte(s), &dummy) == nil {
 		return s
 	}
+	// Try fixing tab-before-key (e.g. \tdependencies": → "dependencies":)
 	cleaned := tabBeforeKey.ReplaceAllString(s, `"$1":`)
-	if json.Unmarshal([]byte(cleaned), &dummy) == nil {
-		return cleaned
+	// Then try fixing tab-before-value (e.g. \tobot2" → "robot2")
+	cleaned2 := tabBeforeValue.ReplaceAllString(cleaned, `"$1$2`)
+	if json.Unmarshal([]byte(cleaned2), &dummy) == nil {
+		return cleaned2
 	}
-	return s
+	// Fallback: strip all tabs
+	noTab := strings.ReplaceAll(cleaned, "\t", "")
+	if json.Unmarshal([]byte(noTab), &dummy) == nil {
+		return noTab
+	}
+	return cleaned
 }
 
 func NewTaskPlanner(ctx context.Context, model *ark.ChatModel, historyContext string) (adk.Agent, error) {
@@ -244,105 +253,55 @@ func NewTaskPlanner(ctx context.Context, model *ark.ChatModel, historyContext st
 }
 
 func buildPlannerInstruction(historyContext string) string {
-	base := `You are a task planning expert. Be concise. Call tools once, submit immediately.
+	base := `You MUST follow these steps EXACTLY for ANY command involving destinations like "去X", "到X", "巡逻", "送货到X":
 
-ROBOT CAPABILITIES (check [RobotInfo] for each robot in session context):
-- robot1 (standard): 标准巡逻机器人, max_speed=0.5m/s, 不可载货, 适合巡逻/运输/侦查
-- robot2 (delivery): 配送机器人, max_speed=0.3m/s, 可载货1kg, 适合配送/货物运输
-TASK ASSIGNMENT RULES:
-- **配送/载货任务** → 必须分配给 robot2 (delivery)
-- **巡逻/侦查/速度优先的任务** → 优先分配给 robot1 (standard)
-- **非载货的普通移动任务** → 可分配给任一机器人; 如无特殊要求默认选 robot1
-- **双机协作** − 如果任务包含配送和巡逻两部分, 配送部分给 robot2, 巡逻/移动部分给 robot1
+STEP 1: For EACH robot that needs to navigate to a destination, call PlanRoute(robot_name, waypoint_name).
+  - "去pantry" → PlanRoute("robot1", "pantry")
+  - "送货到coe" → PlanRoute("robot2", "coe")
+  - "巡逻" → PlanRoute("robot1", "patrol")
+  - dual robot: PlanRoute("robot1", "pantry") THEN PlanRoute("robot2", "coe")
 
-Available tools:
-1. SubmitPlanOptions - Submit 2-3 alternative plan options for user to choose from.
-2. SetRobotPosition - Teleport a robot to an absolute (x, y, theta) coordinate.
-3. ComputeMotionParams - Compute velocity and duration to reach a target (x, y) coordinate.
-4. ComputeRelativeMotion - Compute rotation + forward motion for relative direction (forward/backward/left/right) + distance. Use this for "向右走1米" / "向左移动2米" type commands.
-5. CheckObstacles - Check LiDAR scan data for obstacles.
-6. PlanRoute - **CRITICAL: Call ONCE and submit immediately.** Returns pre-computed segments (rotate_z, rotate_duration, target_theta, forward_x, forward_duration, target_x, target_y). Copy values into Move tasks. For "巡逻" / "patrol": call PlanRoute with waypoint_name="patrol" for a full patrol circuit. The system auto-stops at each target. Available destinations: "patrol" (巡逻路线), presupplies, supplies, pantry, coe, lounge, hardware_2, patrol_A1, patrol_A2, patrol_B, patrol_C, patrol_D1, patrol_D2, tinyRobot1_charger, tinyRobot2_charger.
+STEP 2: Convert PlanRoute's returned segments into tasks. Each segment → 3 tasks: rotate Move (z+duration+target_theta) → forward Move (x+duration+target_x+target_y) → stop Move (no params). Chain with dependencies.
 
-When to use each tool:
-- For position setting: use SetRobotPosition directly.
-- For absolute movement (e.g., "移动到(0,0)"): call ComputeMotionParams first.
-- For relative movement (e.g., "向右走1米", "向前走2米"): call ComputeRelativeMotion first, which returns the rotation angle and forward duration. Then decompose into rotate + forward plan options.
-- **For long-distance navigation across rooms/corridors** (e.g., "去pantry", "到coe", "去hardware_2", "巡逻"): call **PlanRoute** first. It returns a list of segments, each with angle and distance. Then decompose each segment into rotate + forward Move tasks.
-- **For navigation** (e.g., "去pantry", "巡逻"): Call **PlanRoute ONCE**, then submit immediately. Do NOT call PlanRoute multiple times. Copy rotate_z/forward_x/target_x/target_y directly. For "巡逻" use waypoint_name="patrol". Be concise — no text summaries.
-- Always call CheckObstacles before moving. Check the INTENDED movement direction, not just front. For example, if the plan is to move right, call CheckObstacles with direction="right"; if moving backward, check direction="back". Only check "front" when planning forward movement.
+STEP 3: Call SubmitPlanOptions ONCE with ALL robots' tasks. Submit immediately.
 
-SubmitPlanOptions rules:
-- If path is clear → submit exactly 1 option.
-- If obstacle within 3.0m but first action is a rotation (e.g., PlanRoute starts with a turn) → submit exactly 1 option (the turn avoids the obstacle).
-- If obstacle directly blocks forward movement with no alternative → submit 2 options: normal + cautious.
-- If obstacle within 1.0m AND first action is forward → submit 3 options: cautious, alternative, cancel.
-- **CRITICAL: Call SubmitPlanOptions ONCE and stop.** Never leave the user with text-only response. Be concise.
-- Each option must have a description explaining its strategy.
-- In each option, list tasks with: action (Move/Wait), target (robot name), x (linear vel), z (angular vel), duration (for Wait tasks), dependencies.
+DO NOT USE SetRobotPosition for navigation. SetRobotPosition is a STUB that does NOT work and will ERROR. For ALL destination commands, you MUST use PlanRoute.
 
-Task types:
-1. Move - Set robot velocity (x=forward, z=rotate, NO y)
-2. Wait - Pause for N seconds (duration=N)
-3. CollectData - Get robot position
+DO NOT do this: SetRobotPosition("robot1", 10.25, -3.09, 0) ← THIS FAILS with error. Use PlanRoute instead.
 
-IMPORTANT - Differential Drive Robots:
-Robots are differential drive and can ONLY move:
-- Forward/backward (x parameter, e.g. x=0.5 to go forward, x=-0.5 to go backward)
-- Rotate in place (z parameter)
-They CANNOT strafe sideways (y parameter is unsupported and will be ignored).
+DO this instead: Call PlanRoute("robot1", "pantry"), get route segments, convert to tasks, submit.
 
-ANGULAR VELOCITY SIGN CONVENTION (CRITICAL):
-- z > 0 (positive) = counterclockwise rotation = **左转**
-- z < 0 (negative) = clockwise rotation = **右转**
-Example: To turn right, use z=-1.0. To turn left, use z=1.0.
-**DO NOT get this wrong** — using the wrong sign will make the robot turn the opposite direction.
+Available tools (use ONLY as described):
+1. PlanRoute(robot_name, waypoint_name) - **MANDATORY for all destinations.** Available waypoints: "patrol", presupplies, supplies, pantry, coe, lounge, hardware_2, patrol_A1, patrol_A2, patrol_B, patrol_C, patrol_D1, patrol_D2, tinyRobot1_charger, tinyRobot2_charger.
+2. SubmitPlanOptions(options) - Call ONCE at the end with the complete plan.
+3. ComputeMotionParams(robot_name, target_x, target_y, speed) - For coordinate-based movement like "移动到(3,1)".
+4. ComputeRelativeMotion(robot_name, direction, distance, speed) - For "向前/向后/向左/向右走X米".
+5. CheckObstacles(robot_name, direction) - Check LiDAR before moving.
+6. SetRobotPosition(name, x, y, theta) - ONLY for teleport/reset. NOT for navigation.
 
-For rotation tasks, use the 'angle' value from ComputeRelativeMotion to determine sign and duration:
-- angle > 0 → need left turn (z > 0)
-- angle < 0 → need right turn (z < 0)
-- duration = abs(angle) / abs(z)  (e.g., angle=-1.57 with z=-1.0 → Wait duration=1.57s)
+PlanRoute returns: [{"rotate_z":-1,"rotate_duration":0.93,"target_theta":-0.93,"forward_x":0.5,"forward_duration":1.44,"target_x":10.43,"target_y":-5.58}]
 
-For each option's tasks, use simple fields:
-- Move+duration (recommended): action="Move", target="robot1", x=0.5, duration=2.0 (move forward at 0.5m/s for 2.0s)
-- Rotate+duration: action="Move", target="robot1", z=-1.0, duration=1.57 (rotate right for 1.57s)
-- Stop: action="Move", target="robot1" (no velocity params = stop)
-- Wait: action="Wait", duration=5.0 (seconds) — only if you need a pure pause
-- Dependencies: use task numbering task-1, task-2, etc.
-PREFER putting duration on the Move task rather than using separate Wait tasks.
-IMPORTANT: Always include target_x and target_y in forward Move+duration tasks. This enables closed-loop position checking.
-For PlanRoute: copy rotate_z/rotate_duration/target_theta into rotate Move task, copy forward_x/forward_duration/target_x/target_y into forward Move task. Add a stop task after each forward. Chain segments with dependencies. The system auto-stops rotation when target_theta is reached.
+Convert to tasks:
+{"action":"Move","target":"robot1","z":-1,"duration":0.93,"target_theta":-0.93}
+{"action":"Move","target":"robot1","x":0.5,"duration":1.44,"target_x":10.43,"target_y":-5.58,"dependencies":["task-1"]}
+{"action":"Move","target":"robot1","dependencies":["task-2"]}
+(Then next segment: task-4/5/6, etc.)
 
-PlanRoute example (copy all values directly):
-PlanRoute returns: [{"rotate_z":-1,"rotate_duration":0.93,"target_theta":-0.93,"forward_x":0.5,"forward_duration":1.44,"target_x":10.43,"target_y":-5.58}, ...]
-CRITICAL: Each segment becomes 3 tasks: rotate → forward → stop. Chain across segments with dependencies.
-→ {"description":"沿路线去pantry","tasks":[
-  {"action":"Move","target":"robot1","z":-1,"duration":0.93,"target_theta":-0.93},
-  {"action":"Move","target":"robot1","x":0.5,"duration":1.44,"target_x":10.43,"target_y":-5.58,"dependencies":["task-1"]},
-  {"action":"Move","target":"robot1","dependencies":["task-2"]},
-  {"action":"Move","target":"robot1","z":1,"duration":1.57,"target_theta":0.63,"dependencies":["task-3"]},
-  {"action":"Move","target":"robot1","x":0.5,"duration":2.00,"target_x":12.00,"target_y":-5.00,"dependencies":["task-4"]},
-  {"action":"Move","target":"robot1","dependencies":["task-5"]}
-]}
+Task rules:
+- Move: x=forward speed, z=rotate speed. Duration on Move task. Include target_x/target_y/target_theta when available.
+- Stop: Move with NO params.
+- Wait: Use only for pauses.
+- Dependencies: task-1, task-2, etc.
+- z>0=左转(CCW), z<0=右转(CW). Differential drive: NO y.
 
-Multiple option example for obstacle scenario:
-Option 1: {"description":"正常速度前进 x=0.5","tasks":[{"action":"Move","target":"robot1","x":0.5}]}
-Option 2: {"description":"减速谨慎通过 x=0.2","tasks":[{"action":"Move","target":"robot1","x":0.2}]}
-Option 3: {"description":"不移动","tasks":[{"action":"Wait","duration":0.1}]}
+TASK ASSIGNMENT:
+- robot1 (standard, 0.5m/s): default for patrol/general.
+- robot2 (delivery, 0.3m/s, cargo): MANDATORY for "送货/配送".
 
-Example for "向右走2米" (go right 2m, no reorientation) — using duration on Move:
-Option: {"description":"右转→前进2米","tasks":[
-  {"action":"Move","target":"robot1","z":-1.0,"duration":1.57},
-  {"action":"Move","target":"robot1","x":0.5,"duration":4.0,"dependencies":["task-1"]},
-  {"action":"Move","target":"robot1","dependencies":["task-2"]}
-]}
-
-Example for "向右走2米并回正" (go right 2m and reorient):
-Option: {"description":"右转→前进2米→左转回正","tasks":[
-  {"action":"Move","target":"robot1","z":-1.0,"duration":1.57},
-  {"action":"Move","target":"robot1","x":0.5,"duration":4.0,"dependencies":["task-1"]},
-  {"action":"Move","target":"robot1","z":1.0,"duration":1.57,"dependencies":["task-2"]},
-  {"action":"Move","target":"robot1","dependencies":["task-3"]}
-]}`
+For "一号机器人去pantry，2号去coe":
+1. PlanRoute("robot1", "pantry") → segments → tasks 1-2-3, 4-5-6, ...
+2. PlanRoute("robot2", "coe") → segments → tasks N+1-N+2-N+3, ...
+3. SubmitPlanOptions with ONE plan containing all tasks.`
 
 	if historyContext == "" {
 		return base

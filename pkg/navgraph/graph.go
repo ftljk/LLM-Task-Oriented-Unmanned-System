@@ -26,11 +26,16 @@ type Edge struct {
 	DoorName string
 }
 
+type DoorInfo struct {
+	CenterX, CenterY float64
+}
+
 type Graph struct {
 	Vertices  []Vertex
 	Edges     []Edge
 	NameIndex map[string]int
 	Adj       map[int][]Edge
+	Doors     map[string]DoorInfo
 }
 
 type navGraphRaw struct {
@@ -38,6 +43,9 @@ type navGraphRaw struct {
 		Lanes    []interface{} `yaml:"lanes"`
 		Vertices []interface{} `yaml:"vertices"`
 	} `yaml:"levels"`
+	Doors map[string]struct {
+		Endpoints [][]float64 `yaml:"endpoints"`
+	} `yaml:"doors"`
 }
 
 func Load(path string) (*Graph, error) {
@@ -59,6 +67,16 @@ func Load(path string) (*Graph, error) {
 	g := &Graph{
 		NameIndex: make(map[string]int),
 		Adj:       make(map[int][]Edge),
+		Doors:     make(map[string]DoorInfo),
+	}
+
+	// Parse doors
+	for name, door := range raw.Doors {
+		if len(door.Endpoints) >= 2 {
+			cx := (door.Endpoints[0][0] + door.Endpoints[1][0]) / 2
+			cy := (door.Endpoints[0][1] + door.Endpoints[1][1]) / 2
+			g.Doors[name] = DoorInfo{CenterX: cx, CenterY: cy}
+		}
 	}
 
 	// Parse vertices
@@ -175,6 +193,15 @@ func (g *Graph) Distance(a, b int) float64 {
 	dx := g.Vertices[a].X - g.Vertices[b].X
 	dy := g.Vertices[a].Y - g.Vertices[b].Y
 	return math.Sqrt(dx*dx + dy*dy)
+}
+
+func (g *Graph) FindEdge(from, to int) *Edge {
+	for _, e := range g.Adj[from] {
+		if e.To == to {
+			return &e
+		}
+	}
+	return nil
 }
 
 func toFloat(v interface{}) (float64, bool) {

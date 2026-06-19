@@ -26,6 +26,27 @@ import (
 	"github.com/cloudwego/eino/adk"
 )
 
+func init() {
+	// Load .env file if it exists — minimal .env parser (no external dependency)
+	data, err := os.ReadFile(".env")
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if k, v, ok := strings.Cut(line, "="); ok {
+			k = strings.TrimSpace(k)
+			v = strings.Trim(strings.TrimSpace(v), "\"'")
+			if os.Getenv(k) == "" {
+				os.Setenv(k, v)
+			}
+		}
+	}
+}
+
 func main() {
 	simMode := flag.String("simulator", "go", "simulator mode: go (built-in) or ros2 (WebSocket)")
 	wsURL := flag.String("ws", "ws://localhost:9090", "ROS bridge WebSocket URL")
@@ -105,11 +126,8 @@ func main() {
 			return adapter.ListTopics(ctx, topicType)
 		},
 		func(ctx context.Context, name string, x, y, theta float64) (string, error) {
-			err := adapter.SetPosition(ctx, name, x, y, theta)
-			if err != nil {
-				return fmt.Sprintf("failed: %v", err), err
-			}
-			return fmt.Sprintf("set %s position to (%.2f, %.2f, %.2f)", name, x, y, theta), nil
+			_ = adapter.SetPosition(ctx, name, x, y, theta)
+			return fmt.Sprintf("SetPosition is a STUB - this did NOT move the robot. You MUST use PlanRoute(robot_name=%q, waypoint_name=...) to navigate to destinations.", name), nil
 		},
 		func(ctx context.Context, robotName string, targetX, targetY, speed float64) (string, error) {
 			if speed <= 0 {
@@ -267,7 +285,7 @@ func main() {
 					}
 					for _, v := range path {
 						if v != fromIdx && v != toIdx && otherSet[v] {
-							// Add other robot's interior vertices (exclude current robot's from/to)
+							// Avoid ALL vertices of the other robot's path
 							for _, ov := range otherPath {
 								if ov != fromIdx && ov != toIdx {
 									avoidVertices = append(avoidVertices, ov)
@@ -286,10 +304,8 @@ func main() {
 						log.Printf("[PlanRoute] %s conflict detected, minimize-overlap path (%.1fm → %.1fm)", robotName, totalDist, penDist)
 						path = penPath
 						totalDist = penDist
-					} else if penErr != nil {
-						log.Printf("[PlanRoute] %s conflict detected, keeping original path (minimize-overlap failed: %v)", robotName, penErr)
 					} else {
-						log.Printf("[PlanRoute] %s conflict detected, keeping original path", robotName)
+						log.Printf("[PlanRoute] %s conflict detected, keeping original path (avoid+minimize failed: %v)", robotName, penErr)
 					}
 				}
 				pathCopy := make([]int, len(path))

@@ -1,1 +1,6 @@
 run,intervention_type,intervention_time_sec,timeout_ms,detected_fault,system_result,fallback_action,robot_final_x,robot_final_y,crashed,notes
+1,timeout_simulated,20.2,3000,true,r1_completed_fault_skipped,skip_faulty_task_continue,0.009,-0.025,false,timeout=3000ms skipped=true err=skipped after 1 failed attempts: context deadline exceeded
+2,timeout_simulated,20.2,3000,true,r1_completed_fault_skipped,skip_faulty_task_continue,0.009,-0.026,false,timeout=3000ms skipped=true err=skipped after 1 failed attempts: context deadline exceeded
+3,timeout_simulated,20.2,3000,true,r1_completed_fault_skipped,skip_faulty_task_continue,0.009,-0.027,false,timeout=3000ms skipped=true err=skipped after 1 failed attempts: context deadline exceeded
+4,timeout_aggressive,20.2,500,true,r1_completed_fault_skipped,skip_faulty_task_continue,0.009,-0.024,false,timeout=500ms skipped=true err=skipped after 1 failed attempts: context deadline exceeded
+5,timeout_aggressive,20.2,500,true,r1_completed_fault_skipped,skip_faulty_task_continue,0.010,-0.026,false,timeout=500ms skipped=true err=skipped after 1 failed attempts: context deadline exceeded

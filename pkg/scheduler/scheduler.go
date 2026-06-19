@@ -384,9 +384,13 @@ func (s *Scheduler) execWait(ctx context.Context, t *task.Task) error {
 					hasPrevDiff = true
 				}
 
-				// Forward heading hold: keep robot straight, prevent drift into walls
+				// Forward heading hold: steer toward target, not just maintain start heading
 				if hasHold {
-					hdiff := holdStartHeading - odo.Theta
+					refHeading := holdStartHeading
+					if hasTarget {
+						refHeading = math.Atan2(targetY-odo.Y, targetX-odo.X)
+					}
+					hdiff := refHeading - odo.Theta
 					for hdiff > math.Pi {
 						hdiff -= 2 * math.Pi
 					}
